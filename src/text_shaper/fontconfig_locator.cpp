@@ -9,6 +9,7 @@
 #include <fontconfig/fontconfig.h>
 
 #include <string_view>
+#include <variant>
 
 using std::nullopt;
 using std::optional;
@@ -216,11 +217,15 @@ font_source_list fontconfig_locator::locate(font_description const& description)
 
     for (int i = 0; i < fs->nfont; ++i)
     {
+
         FcPattern* font = fs->fonts[i];
 
         FcChar8* file = nullptr;
         if (FcPatternGetString(font, FC_FILE, 0, &file) != FcResultMatch)
             continue;
+
+        FcChar8* family = nullptr;
+        FcPatternGetString(font, FC_FAMILY, 0, &family);
 
 #if defined(FC_COLOR) // Not available on macOS?
 // FcBool color = FcFalse;
@@ -231,6 +236,25 @@ font_source_list fontconfig_locator::locate(font_description const& description)
 //     continue;
 // }
 #endif
+
+        // If no fallback is requested, we only take the first font in the chain.
+        if (i > 0)
+        {
+            if (std::holds_alternative<font_fallback_none>(description.fontFallback))
+                break;
+            // If for fallback we want to use the exact fonts, we need to skip all fonts that don't match the
+            // description.
+            if (const auto& list = std::get_if<font_fallback_list>(&description.fontFallback))
+            {
+                if (std::none_of(list->fallbackFonts.begin(),
+                                 list->fallbackFonts.end(),
+                                 [&](auto const& font) { return font == (char const*) family; }))
+                {
+                    locatorLog()("Skipping font (not in fallback list). {}", (char const*) file);
+                    continue;
+                }
+            }
+        }
 
         int spacing = -1;
         FcPatternGetInteger(font, FC_SPACING, 0, &spacing);
