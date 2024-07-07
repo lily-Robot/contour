@@ -24,6 +24,7 @@ on:
       - '*.sh'
     branches:
       - master
+  workflow_dispatch:
 
 concurrency:
   group: build-${{ github.ref }}
